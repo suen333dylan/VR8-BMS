@@ -1,0 +1,115 @@
+VERSION "VR8-BMS main.cpp CAN mapping"
+
+
+NS_ :
+    NS_DESC_
+    CM_
+    BA_DEF_
+    BA_
+    VAL_
+    CAT_DEF_
+    CAT_
+    FILTER
+    BA_DEF_DEF_
+    EV_DATA_
+    ENVVAR_DATA_
+    SGTYPE_
+    SGTYPE_VAL_
+    BA_DEF_SGTYPE_
+    BA_SGTYPE_
+    SIG_TYPE_REF_
+    VAL_TABLE_
+    SIG_GROUP_
+    SIG_VALTYPE_
+    SIGTYPE_VALTYPE_
+    BO_TX_BU_
+    BA_DEF_REL_
+    BA_REL_
+    BA_DEF_DEF_REL_
+    BU_SG_REL_
+    BU_EV_REL_
+    BU_BO_REL_
+    SG_MUL_VAL_
+
+BS_:
+
+BU_: BMS Host
+
+
+BO_ 256 BMS_CellFrame0: 8 BMS
+ SG_ Cell_01 : 0|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_02 : 16|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_03 : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_04 : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+
+BO_ 257 BMS_CellFrame1: 8 BMS
+ SG_ Cell_05 : 0|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_06 : 16|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_07 : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_08 : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+
+BO_ 258 BMS_CellFrame2: 8 BMS
+ SG_ Cell_09 : 0|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_10 : 16|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_11 : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_12 : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+
+BO_ 259 BMS_CellFrame3: 8 BMS
+ SG_ Cell_13 : 0|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_14 : 16|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_15 : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_16 : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+
+BO_ 260 BMS_CellFrame4: 8 BMS
+ SG_ Cell_17 : 0|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Cell_18_Unused : 16|16@1+ (1,0) [0|65535] "raw" Host
+ SG_ Cell_19_Unused : 32|16@1+ (1,0) [0|65535] "raw" Host
+ SG_ Cell_20_Unused : 48|16@1+ (1,0) [0|65535] "raw" Host
+
+BO_ 512 BMS_Temperatures: 8 BMS
+ SG_ NTC_01_GPIO1 : 0|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
+ SG_ NTC_02_GPIO2 : 16|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
+ SG_ NTC_03_GPIO6 : 32|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
+ SG_ NTC_04_GPIO7 : 48|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
+
+BO_ 576 BMS_Status: 8 BMS
+ SG_ Fault_BMS_Not_OK : 0|1@1+ (1,0) [0|1] "" Host
+ SG_ Fault_Temp_Sensor : 1|1@1+ (1,0) [0|1] "" Host
+ SG_ Fault_Over_Temp : 2|1@1+ (1,0) [0|1] "" Host
+ SG_ Fault_Cell_Voltage : 3|1@1+ (1,0) [0|1] "" Host
+ SG_ Fault_Reserved_4 : 4|1@1+ (1,0) [0|1] "" Host
+ SG_ Fault_Reserved_5 : 5|1@1+ (1,0) [0|1] "" Host
+ SG_ Fault_Reserved_6 : 6|1@1+ (1,0) [0|1] "" Host
+ SG_ Fault_Reserved_7 : 7|1@1+ (1,0) [0|1] "" Host
+ SG_ Balance_Mask : 8|17@1+ (1,0) [0|131071] "bitmask" Host
+ SG_ Module_Min_Cell_Voltage : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Module_Max_Cell_Voltage : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+
+
+CM_ BO_ 256 "Cells 1-4, little-endian uint16 raw ADC code scaled by 100 uV/bit.";
+CM_ BO_ 257 "Cells 5-8, little-endian uint16 raw ADC code scaled by 100 uV/bit.";
+CM_ BO_ 258 "Cells 9-12, little-endian uint16 raw ADC code scaled by 100 uV/bit.";
+CM_ BO_ 259 "Cells 13-16, little-endian uint16 raw ADC code scaled by 100 uV/bit.";
+CM_ BO_ 260 "Cell 17 is valid. Remaining three uint16 slots are filler and are transmitted as 0xFFFF by the current firmware.";
+CM_ BO_ 512 "Four NTC channels packed as signed int16 in 0.1 degC. Mapping follows firmware AUX selection: GPIO1, GPIO2, GPIO6, GPIO7.";
+CM_ BO_ 576 "Fault bits, 17-bit balance mask, module min cell voltage, and module max cell voltage.";
+
+CM_ SG_ 260 Cell_18_Unused "Unused filler field. Current firmware sends 0xFFFF.";
+CM_ SG_ 260 Cell_19_Unused "Unused filler field. Current firmware sends 0xFFFF.";
+CM_ SG_ 260 Cell_20_Unused "Unused filler field. Current firmware sends 0xFFFF.";
+CM_ SG_ 512 NTC_01_GPIO1 "Thermistor on LTC6813 GPIO1.";
+CM_ SG_ 512 NTC_02_GPIO2 "Thermistor on LTC6813 GPIO2.";
+CM_ SG_ 512 NTC_03_GPIO6 "Thermistor on LTC6813 GPIO6.";
+CM_ SG_ 512 NTC_04_GPIO7 "Thermistor on LTC6813 GPIO7.";
+CM_ SG_ 576 Fault_BMS_Not_OK "Set when BMS_OK output is LOW.";
+CM_ SG_ 576 Fault_Temp_Sensor "Set when any temperature channel decodes as INT16_MAX / invalid.";
+CM_ SG_ 576 Fault_Over_Temp "Set when any thermistor is above 60.0 degC.";
+CM_ SG_ 576 Fault_Cell_Voltage "Set when any cell is outside configured voltage window.";
+CM_ SG_ 576 Balance_Mask "Bit 0 maps to Cell1, bit 16 maps to Cell17. Set bit means balancing requested.";
+CM_ SG_ 576 Module_Min_Cell_Voltage "Lowest active cell voltage in this module.";
+CM_ SG_ 576 Module_Max_Cell_Voltage "Highest active cell voltage in this module.";
+
+VAL_ 576 Fault_BMS_Not_OK 0 "OK" 1 "Fault";
+VAL_ 576 Fault_Temp_Sensor 0 "OK" 1 "SensorError";
+VAL_ 576 Fault_Over_Temp 0 "OK" 1 "Over60C";
+VAL_ 576 Fault_Cell_Voltage 0 "OK" 1 "OutOfRange";
