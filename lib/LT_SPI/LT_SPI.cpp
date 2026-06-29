@@ -150,7 +150,7 @@ void quikeval_SPI_connect()
 // before using the other SPI routines.
 void quikeval_SPI_init(void)  // Initializes SPI
 {
-  spi_enable(SPI_CLOCK_DIV16);  //! 1) Configure the spi port for 4MHz SCK
+  spi_enable(16);  //! 1) Configure the spi port for 4MHz SCK
 }
 
 // Setup the processor for hardware SPI communication.
@@ -163,7 +163,7 @@ void spi_enable(uint8_t spi_clock_divider) // Configures SCK frequency. Use cons
   //pinMode(MOSI, OUTPUT);            //! 2) Setup MOSI as output
   //pinMode(QUIKEVAL_CS, OUTPUT);     //! 3) Setup CS as output
   SPI.begin();
-  SPI.setClockDivider(spi_clock_divider);
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
 }
 
 // Disable the SPI hardware port

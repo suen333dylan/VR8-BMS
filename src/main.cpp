@@ -5,15 +5,17 @@
 #include "HardwareSerial.h"
 #include "LTC6813.h"
 #include "LTC681x.h"
+#include "api/Common.h"
 #include "mcp_can.h"
 
 namespace {
 
-const uint8_t TOTAL_IC = 1;
+const uint8_t TOTAL_IC = 6;
 const uint8_t ACTIVE_CELLS_PER_IC = 17;
 const uint8_t NTC_PER_IC = 4;
 
 const uint8_t BMS_OK_PIN = 6;
+const uint8_t DISCHARGE_EN_PIN = 7;
 const uint8_t CAN_CS_PIN = 9;
 
 const uint8_t ADC_CONVERSION_MODE = MD_7KHZ_3KHZ;
@@ -22,8 +24,15 @@ const uint8_t ADC_DCP = DCP_DISABLED;
 const uint16_t CELL_OK_MIN_CODE = 33000;
 const uint16_t CELL_OK_MAX_CODE = 43500;
 const uint16_t BALANCE_DELTA_CODE = 260;
-const int16_t TEMP_LIMIT_DECI_C = 600;
-const uint32_t POLL_INTERVAL_MS = 250;
+const int16_t TEMP_MAX_DECI_C = 600;
+const int16_t TEMP_MIN_DECI_C = -100;
+
+const uint8_t BALANCE_GROUP = 1;
+const uint8_t BALANCE_CELLS_PER_GROUP = 1;
+
+const uint32_t POLL_INTERVAL_MS = 1000;
+const uint32_t BALANCE_INTERVAL_MS = 500;
+const uint32_t CAN_TX_INTERVAL_MS = 1000;
 const uint32_t OPEN_WIRE_INTERVAL_MS = 5000;
 
 const uint8_t TOTAL_CELL_CHANNELS = 18;
@@ -56,13 +65,18 @@ const uint8_t NTC_AUX_INDEX[NTC_PER_IC] = {0, 1, 6, 7};
 
 cell_asic BMS_IC[TOTAL_IC];
 uint32_t discharge_mask[TOTAL_IC];
+uint32_t balance_mask[TOTAL_IC];
 int16_t ntc_temperature_deci_c[TOTAL_IC][NTC_PER_IC];
 uint16_t open_wire_channel[TOTAL_IC];
 bool open_wire_valid[TOTAL_IC];
 MCP_CAN can_bus(CAN_CS_PIN);
 
 bool can_ready = false;
+bool bms_ok = false;
+bool discharge_enabled = false;
 uint32_t last_poll_ms = 0;
+uint32_t last_balance_ms = 0;
+uint32_t last_can_tx_ms = 0;
 uint32_t last_open_wire_ms = 0;
 uint32_t cycle_count = 0;
 
@@ -75,7 +89,7 @@ void clearDischargeRequests() {
 }
 
 bool isDischargeRequested(uint8_t ic, uint8_t cell) {
-  return (discharge_mask[ic] & (1UL << cell)) != 0;
+  return (discharge_mask[ic] >> cell) & 1;
 }
 
 void configureIc(uint8_t ic_index) {
@@ -83,7 +97,8 @@ void configureIc(uint8_t ic_index) {
   bool dcc_b[7] = {false};
 
   for (uint8_t cell = 0; cell < ACTIVE_CELLS_PER_IC; ++cell) {
-    if (!isDischargeRequested(ic_index, cell)) {
+    if (!(isDischargeRequested(ic_index, cell) &&
+          (balance_mask[ic_index] >> cell) & 1)) {
       continue;
     }
 
@@ -105,10 +120,11 @@ bool writeConfiguration() {
     configureIc(ic);
   }
 
-  SPI.setClockDivider(SPI_CLOCK_DIV16);
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
   wakeup_sleep(TOTAL_IC);
   LTC6813_wrcfg(TOTAL_IC, BMS_IC);
   LTC6813_wrcfgb(TOTAL_IC, BMS_IC);
+  SPI.endTransaction();
   return true;
 }
 
@@ -125,21 +141,25 @@ bool initializeCan() {
 }
 
 bool measureCells() {
-  SPI.setClockDivider(SPI_CLOCK_DIV16);
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
   wakeup_sleep(TOTAL_IC);
   LTC6813_adcv(ADC_CONVERSION_MODE, ADC_DCP, CELL_CH_ALL);
   LTC6813_pollAdc();
   wakeup_idle(TOTAL_IC);
-  return LTC6813_rdcv(REG_ALL, TOTAL_IC, BMS_IC) == 0;
+  bool result = LTC6813_rdcv(REG_ALL, TOTAL_IC, BMS_IC) == 0;
+  SPI.endTransaction();
+  return result;
 }
 
 bool measureAux() {
-  SPI.setClockDivider(SPI_CLOCK_DIV16);
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
   wakeup_sleep(TOTAL_IC);
   LTC6813_adax(ADC_CONVERSION_MODE, AUX_CH_ALL);
   LTC6813_pollAdc();
   wakeup_idle(TOTAL_IC);
-  return LTC6813_rdaux(REG_ALL, TOTAL_IC, BMS_IC) == 0;
+  bool result = LTC6813_rdaux(REG_ALL, TOTAL_IC, BMS_IC) == 0;
+  SPI.endTransaction();
+  return result;
 }
 
 int16_t temperatureFromAuxCode(uint16_t aux_code, uint16_t vref2_code) {
@@ -214,16 +234,7 @@ bool hasOpenWireFault(uint8_t ic) {
   return open_wire_valid[ic] && open_wire_channel[ic] != OPEN_WIRE_NONE;
 }
 
-void runOpenWireDiagnosticIfDue(uint32_t now) {
-  if (!OPEN_WIRE_ENABLED) {
-    return;
-  }
-
-  if (last_open_wire_ms != 0 &&
-      now - last_open_wire_ms < OPEN_WIRE_INTERVAL_MS) {
-    return;
-  }
-
+void runOpenWireDiagnostic() {
   uint16_t saved_codes[TOTAL_IC][TOTAL_CELL_CHANNELS];
   for (uint8_t ic = 0; ic < TOTAL_IC; ++ic) {
     for (uint8_t cell = 0; cell < TOTAL_CELL_CHANNELS; ++cell) {
@@ -231,19 +242,19 @@ void runOpenWireDiagnosticIfDue(uint32_t now) {
     }
   }
 
-  SPI.setClockDivider(SPI_CLOCK_DIV16);
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
   LTC6813_run_openwire_single(TOTAL_IC, BMS_IC);
+  SPI.endTransaction();
 
   for (uint8_t ic = 0; ic < TOTAL_IC; ++ic) {
-    open_wire_channel[ic] = normalizeOpenWireChannel(BMS_IC[ic].system_open_wire);
+    open_wire_channel[ic] =
+        normalizeOpenWireChannel(BMS_IC[ic].system_open_wire);
     open_wire_valid[ic] = true;
 
     for (uint8_t cell = 0; cell < TOTAL_CELL_CHANNELS; ++cell) {
       BMS_IC[ic].cells.c_codes[cell] = saved_codes[ic][cell];
     }
   }
-
-  last_open_wire_ms = now;
 }
 
 bool computeFaultState() {
@@ -259,7 +270,8 @@ bool computeFaultState() {
 
     for (uint8_t ntc = 0; ntc < NTC_PER_IC; ++ntc) {
       const int16_t temp_deci_c = ntc_temperature_deci_c[ic][ntc];
-      if (temp_deci_c == INT16_MAX || temp_deci_c > TEMP_LIMIT_DECI_C) {
+      if (temp_deci_c == INT16_MAX || temp_deci_c > TEMP_MAX_DECI_C ||
+          temp_deci_c < TEMP_MIN_DECI_C) {
         ok = false;
       }
     }
@@ -292,11 +304,24 @@ void recomputeDischargeRequests() {
   const uint16_t balance_threshold = min_code + BALANCE_DELTA_CODE;
   for (uint8_t ic = 0; ic < TOTAL_IC; ++ic) {
     for (uint8_t cell = 0; cell < ACTIVE_CELLS_PER_IC; ++cell) {
-      if (BMS_IC[ic].cells.c_codes[cell] > balance_threshold) {
+      if (BMS_IC[ic].cells.c_codes[cell] >= balance_threshold) {
         discharge_mask[ic] |= (1UL << cell);
       }
     }
   }
+}
+
+void recomputeBalanceMask() {
+  for (uint8_t ic = 0; ic < TOTAL_IC; ++ic) {
+    balance_mask[ic] = 0;
+    for (uint8_t cell = 0; cell < ACTIVE_CELLS_PER_IC; ++cell) {
+      if ((cycle_count + cell) % BALANCE_GROUP < BALANCE_CELLS_PER_GROUP)
+      {
+        balance_mask[ic] |= (1UL << cell);
+      }
+    }
+  }
+  cycle_count++;
 }
 
 bool sendCanFrame(uint16_t id, const uint8_t *data, uint8_t length) {
@@ -430,18 +455,22 @@ void printIcReport(uint8_t ic) {
   Serial.println();
 }
 
-void printCycleReport(bool bms_ok) {
+void printCycleReport(bool bms_ok, bool discharge_set) {
   Serial.println();
-  Serial.print(F("=== BMS Cycle "));
-  Serial.print(cycle_count);
-  Serial.print(F(" @ "));
+  Serial.print(F("=== BMS Time "));
   Serial.print(millis());
   Serial.println(F(" ms ==="));
 
   Serial.print(F("BMS_OK="));
   Serial.print(bms_ok ? F("HIGH") : F("LOW"));
   Serial.print(F(", CAN="));
-  Serial.println(can_ready ? F("OK") : F("FAIL"));
+  Serial.print(can_ready ? F("OK") : F("FAIL"));
+  Serial.print(F(", Discharge="));
+  Serial.println(discharge_set ? F("ENABLED") : F("DISABLED"));
+
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
+  wakeup_idle(TOTAL_IC);
+  SPI.endTransaction();
 
   for (uint8_t ic = 0; ic < TOTAL_IC; ++ic) {
     printIcReport(ic);
@@ -500,10 +529,10 @@ void sendStatusFrame(uint8_t ic, bool bms_ok) {
 
   for (uint8_t ntc = 0; ntc < NTC_PER_IC; ++ntc) {
     const int16_t temp = ntc_temperature_deci_c[ic][ntc];
-    if (temp == INT16_MAX) {
+    if (temp == INT16_MAX || temp < TEMP_MIN_DECI_C) {
       fault_bits |= 0x02;
     }
-    if (temp > TEMP_LIMIT_DECI_C) {
+    if (temp > TEMP_MAX_DECI_C) {
       fault_bits |= 0x04;
     }
   }
@@ -548,6 +577,7 @@ void initializeBms() {
   LTC6813_init_reg_limits(TOTAL_IC, BMS_IC);
   resetOpenWireState();
   clearDischargeRequests();
+  recomputeBalanceMask();
   writeConfiguration();
 }
 
@@ -588,18 +618,7 @@ bool runPollingCycle(uint32_t now) {
   }
 
   updateTemperatures();
-  runOpenWireDiagnosticIfDue(now);
-  const bool bms_ok = computeFaultState();
-  if (bms_ok && false) {
-    recomputeDischargeRequests();
-  } else {
-    clearDischargeRequests();
-  }
-  writeConfiguration();
-  sendAllCan(bms_ok);
-  ++cycle_count;
-  printCycleReport(bms_ok);
-  setBmsOk(bms_ok);
+  recomputeDischargeRequests();
   return true;
 }
 
@@ -607,14 +626,12 @@ bool runPollingCycle(uint32_t now) {
 
 void setup() {
   Serial.begin(115200);
+  while (!Serial)
+    ;
   Serial.println(F("Initializing VR8-BMS..."));
 
   pinMode(BMS_OK_PIN, OUTPUT);
   setBmsOk(false);
-
-  // 1. 封印 Arduino Mega 的 SPI Slave 崩潰機制 (非常重要)
-  // pinMode(53, OUTPUT);
-  // digitalWrite(53, HIGH);
 
   // 2. 關閉 LTC6820 (isoSPI) 的通訊 (Linduino 預設對應 Arduino 的 Pin 10)
   pinMode(10, OUTPUT);
@@ -623,27 +640,71 @@ void setup() {
   pinMode(CAN_CS_PIN, OUTPUT);
   digitalWrite(CAN_CS_PIN, HIGH);
 
+  pinMode(DISCHARGE_EN_PIN, INPUT_PULLUP);
+
   SPI.begin();
-  SPI.setClockDivider(SPI_CLOCK_DIV16);
+  SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE3));
 
   initializeBms();
+  SPI.endTransaction();
   can_ready = initializeCan();
   printStartupSummary();
 
   if (!can_ready) {
     Serial.println(F("MCP2515 init failed"));
   }
+
+  pinMode(5, OUTPUT);
+  digitalWrite(5, LOW);
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
+  pinMode(3, OUTPUT);
+  digitalWrite(3, HIGH);
 }
 
 void loop() {
   const uint32_t now = millis();
-  if (now - last_poll_ms < POLL_INTERVAL_MS) {
-    return;
+
+  // Perform a polling cycle to read cell voltages and temperatures, and update
+  if (now - last_poll_ms >= POLL_INTERVAL_MS) {
+    last_poll_ms = now;
+    const bool cycle_ok = runPollingCycle(now);
+    if (!cycle_ok) {
+      Serial.println(F("BMS polling error"));
+    }
   }
 
-  last_poll_ms = now;
-  const bool cycle_ok = runPollingCycle(now);
-  if (!cycle_ok) {
-    Serial.println(F("BMS polling error"));
+  // Periodically run the open wire diagnostic
+  if (OPEN_WIRE_ENABLED && now - last_open_wire_ms >= OPEN_WIRE_INTERVAL_MS) {
+    last_open_wire_ms = now;
+    clearDischargeRequests();
+    writeConfiguration();
+    runOpenWireDiagnostic();
+  }
+
+  // Compute the overall BMS fault state and determine if discharge should be
+  // enabled.
+  bms_ok = computeFaultState();
+  setBmsOk(bms_ok);
+  discharge_enabled = digitalRead(DISCHARGE_EN_PIN) == LOW;
+
+  // If the BMS is OK and discharge is enabled, compute which cells need to be
+  // discharged
+  if (bms_ok && discharge_enabled) {
+    if (now - last_balance_ms >= BALANCE_INTERVAL_MS) {
+      last_balance_ms = now;
+      recomputeBalanceMask();
+      writeConfiguration();
+    }
+  } else {
+    // If we're not OK to discharge, ensure all discharge requests are cleared.
+    clearDischargeRequests();
+    writeConfiguration();
+  }
+
+  if (can_ready && (now - last_can_tx_ms) >= CAN_TX_INTERVAL_MS) {
+    last_can_tx_ms = now;
+    sendAllCan(bms_ok);
+    printCycleReport(bms_ok, discharge_enabled);
   }
 }
