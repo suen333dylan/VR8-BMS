@@ -5,7 +5,6 @@
 #include "HardwareSerial.h"
 #include "LTC6813.h"
 #include "LTC681x.h"
-#include "api/Common.h"
 #include "mcp_can.h"
 
 namespace {
@@ -14,7 +13,8 @@ const uint8_t TOTAL_IC = 6;
 const uint8_t ACTIVE_CELLS_PER_IC = 17;
 const uint8_t NTC_PER_IC = 4;
 
-const uint8_t BMS_OK_PIN = 6;
+const uint8_t BMS_OK_PIN = 5;
+const uint8_t BEEP_PIN = 4;
 const uint8_t DISCHARGE_EN_PIN = 7;
 const uint8_t CAN_CS_PIN = 9;
 
@@ -23,14 +23,16 @@ const uint8_t ADC_DCP = DCP_DISABLED;
 
 const uint16_t CELL_OK_MIN_CODE = 33000;
 const uint16_t CELL_OK_MAX_CODE = 43500;
+// const uint16_t CELL_OK_MAX_CODE = 39000;
 const uint16_t BALANCE_DELTA_CODE = 260;
-const int16_t TEMP_MAX_DECI_C = 600;
-const int16_t TEMP_MIN_DECI_C = -100;
+const int16_t TEMP_MAX_DECI_C = 550;
+const int16_t TEMP_MIN_DECI_C = 50;
+const uint32_t REPORT_DELAY_MS = 1000;
 
 const uint8_t BALANCE_GROUP = 1;
 const uint8_t BALANCE_CELLS_PER_GROUP = 1;
 
-const uint32_t POLL_INTERVAL_MS = 1000;
+const uint32_t POLL_INTERVAL_MS = 200;
 const uint32_t BALANCE_INTERVAL_MS = 500;
 const uint32_t CAN_TX_INTERVAL_MS = 1000;
 const uint32_t OPEN_WIRE_INTERVAL_MS = 5000;
@@ -55,9 +57,9 @@ const bool FDRF = false;
 const bool DTMEN = true;
 bool PSBITS[2] = {false, false};
 
-const uint16_t CAN_ID_CELL_BASE = 0x100;
-const uint16_t CAN_ID_TEMP_BASE = 0x200;
-const uint16_t CAN_ID_STATUS_BASE = 0x240;
+const uint16_t CAN_ID_CELL_BASE = 0x1100;
+const uint16_t CAN_ID_TEMP_BASE = 0x1200; // 0x201 is used by the Motor Controller
+const uint16_t CAN_ID_STATUS_BASE = 0x1300;
 
 // AUX order is GPIO 1, GPIO 2, GPIO 3, GPIO 4, GPIO 5, Vref2, GPIO 6, GPIO 7,
 // GPIO 8, GPIO 9
@@ -78,9 +80,28 @@ uint32_t last_poll_ms = 0;
 uint32_t last_balance_ms = 0;
 uint32_t last_can_tx_ms = 0;
 uint32_t last_open_wire_ms = 0;
+uint32_t first_error_state_ms = 0;
 uint32_t cycle_count = 0;
 
-void setBmsOk(bool ok) { digitalWrite(BMS_OK_PIN, ok ? HIGH : LOW); }
+void setBmsOk(bool ok, bool delay = true) {
+  digitalWrite(BEEP_PIN, ok ? LOW : HIGH);
+  
+  uint32_t now = millis();
+  if (!ok) {
+    if (first_error_state_ms == 0) {
+      first_error_state_ms = now;
+    }
+
+    if (delay) {
+      digitalWrite(BMS_OK_PIN, (now - first_error_state_ms) >= REPORT_DELAY_MS ? LOW : HIGH);
+    } else {
+      digitalWrite(BMS_OK_PIN, LOW);
+    }
+  } else {
+    digitalWrite(BMS_OK_PIN, HIGH);
+    first_error_state_ms = 0;
+  }
+}
 
 void clearDischargeRequests() {
   for (uint8_t ic = 0; ic < TOTAL_IC; ++ic) {
@@ -315,8 +336,7 @@ void recomputeBalanceMask() {
   for (uint8_t ic = 0; ic < TOTAL_IC; ++ic) {
     balance_mask[ic] = 0;
     for (uint8_t cell = 0; cell < ACTIVE_CELLS_PER_IC; ++cell) {
-      if ((cycle_count + cell) % BALANCE_GROUP < BALANCE_CELLS_PER_GROUP)
-      {
+      if ((cycle_count + cell) % BALANCE_GROUP < BALANCE_CELLS_PER_GROUP) {
         balance_mask[ic] |= (1UL << cell);
       }
     }
@@ -330,7 +350,7 @@ bool sendCanFrame(uint16_t id, const uint8_t *data, uint8_t length) {
   }
 
   for (uint8_t attempt = 0; attempt < 3; ++attempt) {
-    if (can_bus.sendMsgBuf(id, 0, length, const_cast<uint8_t *>(data)) ==
+    if (can_bus.sendMsgBuf(id, 1, length, const_cast<uint8_t *>(data)) ==
         CAN_OK) {
       return true;
     }
@@ -626,8 +646,6 @@ bool runPollingCycle(uint32_t now) {
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial)
-    ;
   Serial.println(F("Initializing VR8-BMS..."));
 
   pinMode(BMS_OK_PIN, OUTPUT);
@@ -639,6 +657,9 @@ void setup() {
 
   pinMode(CAN_CS_PIN, OUTPUT);
   digitalWrite(CAN_CS_PIN, HIGH);
+
+  pinMode(BEEP_PIN, OUTPUT);
+  digitalWrite(BEEP_PIN, LOW);
 
   pinMode(DISCHARGE_EN_PIN, INPUT_PULLUP);
 
@@ -653,20 +674,13 @@ void setup() {
   if (!can_ready) {
     Serial.println(F("MCP2515 init failed"));
   }
-
-  pinMode(5, OUTPUT);
-  digitalWrite(5, LOW);
-  pinMode(4, OUTPUT);
-  digitalWrite(4, HIGH);
-  pinMode(3, OUTPUT);
-  digitalWrite(3, HIGH);
 }
 
 void loop() {
   const uint32_t now = millis();
 
   // Perform a polling cycle to read cell voltages and temperatures, and update
-  if (now - last_poll_ms >= POLL_INTERVAL_MS) {
+  if (last_poll_ms == 0 || now - last_poll_ms >= POLL_INTERVAL_MS) {
     last_poll_ms = now;
     const bool cycle_ok = runPollingCycle(now);
     if (!cycle_ok) {
@@ -675,7 +689,8 @@ void loop() {
   }
 
   // Periodically run the open wire diagnostic
-  if (OPEN_WIRE_ENABLED && now - last_open_wire_ms >= OPEN_WIRE_INTERVAL_MS) {
+  if (OPEN_WIRE_ENABLED && (last_open_wire_ms == 0 ||
+                            now - last_open_wire_ms >= OPEN_WIRE_INTERVAL_MS)) {
     last_open_wire_ms = now;
     clearDischargeRequests();
     writeConfiguration();
@@ -691,7 +706,7 @@ void loop() {
   // If the BMS is OK and discharge is enabled, compute which cells need to be
   // discharged
   if (bms_ok && discharge_enabled) {
-    if (now - last_balance_ms >= BALANCE_INTERVAL_MS) {
+    if (last_balance_ms == 0 || now - last_balance_ms >= BALANCE_INTERVAL_MS) {
       last_balance_ms = now;
       recomputeBalanceMask();
       writeConfiguration();
@@ -702,7 +717,7 @@ void loop() {
     writeConfiguration();
   }
 
-  if (can_ready && (now - last_can_tx_ms) >= CAN_TX_INTERVAL_MS) {
+  if (can_ready && (!bms_ok || last_can_tx_ms == 0 || now - last_can_tx_ms >= CAN_TX_INTERVAL_MS)) {
     last_can_tx_ms = now;
     sendAllCan(bms_ok);
     printCycleReport(bms_ok, discharge_enabled);
