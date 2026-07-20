@@ -10,4 +10,5 @@ private:
     static void sendCellFrames(const BmsState& state, uint8_t ic);
     static void sendTemperatureFrame(const BmsState& state, uint8_t ic);
     static void sendStatusFrame(const BmsState& state);
+    static void sendBalanceFrame(const BmsState& state, uint8_t ic);
 };

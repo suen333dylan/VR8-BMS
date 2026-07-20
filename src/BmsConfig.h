@@ -46,6 +46,7 @@ namespace BmsConfig {
     const uint16_t CAN_ID_CELL_BASE = 0x1100;
     const uint16_t CAN_ID_TEMP_BASE = 0x1200;
     const uint16_t CAN_ID_STATUS_BASE = 0x1300;
+    const uint16_t CAN_ID_BALANCE_BASE = 0x1400;
 
     const uint8_t NTC_AUX_INDEX[4] = {0, 1, 6, 7};
 }

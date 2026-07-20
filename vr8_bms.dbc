@@ -203,35 +203,31 @@ BO_ 0x1204 IC5_Temperatures: 8 BMS
  SG_ IC5_Temp_4 : 48|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
 
 
-BO_ 0x1300 IC1_Status: 8 BMS
- SG_ IC1_Fault_Bits : 0|8@1+ (1,0) [0|255] "" Host
- SG_ IC1_Balance_Mask : 8|17@1+ (1,0) [0|131071] "" Host
- SG_ IC1_Min_Cell_Voltage : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
- SG_ IC1_Max_Cell_Voltage : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+BO_ 0x1300 Pack_Status: 8 BMS
+ SG_ Pack_Fault_Bits : 0|8@1+ (1,0) [0|255] "" Host
+ SG_ Pack_Balance_IC_Mask : 8|6@1+ (1,0) [0|63] "" Host
+ SG_ Pack_Reserved : 16|16@1+ (1,0) [0|0] "" Host
+ SG_ Pack_Min_Cell_Voltage : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ Pack_Max_Cell_Voltage : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
 
-BO_ 0x1301 IC2_Status: 8 BMS
- SG_ IC2_Fault_Bits : 0|8@1+ (1,0) [0|255] "" Host
- SG_ IC2_Balance_Mask : 8|17@1+ (1,0) [0|131071] "" Host
- SG_ IC2_Min_Cell_Voltage : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
- SG_ IC2_Max_Cell_Voltage : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
 
-BO_ 0x1302 IC3_Status: 8 BMS
- SG_ IC3_Fault_Bits : 0|8@1+ (1,0) [0|255] "" Host
- SG_ IC3_Balance_Mask : 8|17@1+ (1,0) [0|131071] "" Host
- SG_ IC3_Min_Cell_Voltage : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
- SG_ IC3_Max_Cell_Voltage : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+BO_ 0x1400 IC1_Balance: 8 BMS
+ SG_ IC1_Balance_Mask : 0|17@1+ (1,0) [0|131071] "" Host
 
-BO_ 0x1303 IC4_Status: 8 BMS
- SG_ IC4_Fault_Bits : 0|8@1+ (1,0) [0|255] "" Host
- SG_ IC4_Balance_Mask : 8|17@1+ (1,0) [0|131071] "" Host
- SG_ IC4_Min_Cell_Voltage : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
- SG_ IC4_Max_Cell_Voltage : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+BO_ 0x1401 IC2_Balance: 8 BMS
+ SG_ IC2_Balance_Mask : 0|17@1+ (1,0) [0|131071] "" Host
 
-BO_ 0x1304 IC5_Status: 8 BMS
- SG_ IC5_Fault_Bits : 0|8@1+ (1,0) [0|255] "" Host
- SG_ IC5_Balance_Mask : 8|17@1+ (1,0) [0|131071] "" Host
- SG_ IC5_Min_Cell_Voltage : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
- SG_ IC5_Max_Cell_Voltage : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+BO_ 0x1402 IC3_Balance: 8 BMS
+ SG_ IC3_Balance_Mask : 0|17@1+ (1,0) [0|131071] "" Host
+
+BO_ 0x1403 IC4_Balance: 8 BMS
+ SG_ IC4_Balance_Mask : 0|17@1+ (1,0) [0|131071] "" Host
+
+BO_ 0x1404 IC5_Balance: 8 BMS
+ SG_ IC5_Balance_Mask : 0|17@1+ (1,0) [0|131071] "" Host
+
+BO_ 0x1405 IC6_Balance: 8 BMS
+ SG_ IC6_Balance_Mask : 0|17@1+ (1,0) [0|131071] "" Host
 
 
 CM_ BO_ 0x1100 "IC1 Cells 1-4, 100uV/bit";
@@ -241,10 +237,14 @@ CM_ BO_ 0x1103 "IC1 Cells 13-16, 100uV/bit";
 CM_ BO_ 0x1104 "IC1 Cell 17, 100uV/bit";
 
 CM_ BO_ 0x1200 "IC1 Temperatures (NTC 1-4), 0.1 degC/bit";
-CM_ BO_ 0x1300 "IC1 BMS Status (Faults, Balance, Min/Max Voltage)";
+CM_ BO_ 0x1300 "Pack-level BMS Status aggregated from all ICs (Faults, Balance IC mask, Min/Max Voltage)";
+CM_ BO_ 0x1400 "IC1 Cell Balance Status (17-bit mask)";
 
-CM_ SG_ 0x1300 IC1_Fault_Bits "Bit 0: !BMS_OK, Bit 1: Temp Range ERR, Bit 2: Over Temp, Bit 3: Cell range ERR, Bit 4: Open Wire";
-CM_ SG_ 0x1300 IC1_Balance_Mask "17-bit mask for cells being discharged";
+CM_ SG_ 0x1300 Pack_Fault_Bits "Bit 0: !BMS_OK, Bit 1: Under Temp, Bit 2: Over Temp, Bit 3: Cell Voltage OOR, Bit 4: Open Wire";
+CM_ SG_ 0x1300 Pack_Balance_IC_Mask "6-bit mask: each bit indicates if the corresponding IC has cells being balanced";
+CM_ SG_ 0x1300 Pack_Min_Cell_Voltage "Minimum cell voltage across all ICs, 100uV/bit";
+CM_ SG_ 0x1300 Pack_Max_Cell_Voltage "Maximum cell voltage across all ICs, 100uV/bit";
 
 BA_DEF_  "BusType" STRING ;
 BA_DEF_DEF_  "BusType" "CAN";
+
