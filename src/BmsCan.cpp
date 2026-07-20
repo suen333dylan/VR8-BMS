@@ -109,7 +109,9 @@ void BmsCan::sendAllCan(const BmsState& state) {
     for (uint8_t ic = 0; ic < BmsConfig::TOTAL_IC; ++ic) {
         sendCellFrames(state, ic);
         sendTemperatureFrame(state, ic);
-        sendBalanceFrame(state, ic);
+        if (state.discharge_enabled) {
+            sendBalanceFrame(state, ic);
+        }
     }
     sendStatusFrame(state);
 }
