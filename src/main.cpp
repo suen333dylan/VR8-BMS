@@ -21,12 +21,11 @@ const uint8_t CAN_CS_PIN = 9;
 const uint8_t ADC_CONVERSION_MODE = MD_7KHZ_3KHZ;
 const uint8_t ADC_DCP = DCP_DISABLED;
 
-const uint16_t CELL_OK_MIN_CODE = 33000;
+const uint16_t CELL_OK_MIN_CODE = 30000;
 const uint16_t CELL_OK_MAX_CODE = 43500;
-// const uint16_t CELL_OK_MAX_CODE = 39000;
 const uint16_t BALANCE_DELTA_CODE = 260;
-const int16_t TEMP_MAX_DECI_C = 550;
-const int16_t TEMP_MIN_DECI_C = 50;
+const int16_t TEMP_MAX_DECI_C = 600;
+const int16_t TEMP_MIN_DECI_C = 100;
 const uint32_t REPORT_DELAY_MS = 1000;
 
 const uint8_t BALANCE_GROUP = 1;
@@ -34,7 +33,7 @@ const uint8_t BALANCE_CELLS_PER_GROUP = 1;
 
 const uint32_t POLL_INTERVAL_MS = 200;
 const uint32_t BALANCE_INTERVAL_MS = 500;
-const uint32_t CAN_TX_INTERVAL_MS = 1000;
+const uint32_t CAN_TX_INTERVAL_MS = 200;
 const uint32_t OPEN_WIRE_INTERVAL_MS = 5000;
 
 const uint8_t TOTAL_CELL_CHANNELS = 18;
