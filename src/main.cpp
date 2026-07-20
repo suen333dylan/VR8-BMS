@@ -278,13 +278,11 @@ void runOpenWireDiagnostic() {
 }
 
 bool computeFaultState() {
-  bool ok = true;
-
   for (uint8_t ic = 0; ic < TOTAL_IC; ++ic) {
     for (uint8_t cell = 0; cell < ACTIVE_CELLS_PER_IC; ++cell) {
       const uint16_t code = BMS_IC[ic].cells.c_codes[cell];
       if (code < CELL_OK_MIN_CODE || code > CELL_OK_MAX_CODE) {
-        ok = false;
+        return false;
       }
     }
 
@@ -292,16 +290,16 @@ bool computeFaultState() {
       const int16_t temp_deci_c = ntc_temperature_deci_c[ic][ntc];
       if (temp_deci_c == INT16_MAX || temp_deci_c > TEMP_MAX_DECI_C ||
           temp_deci_c < TEMP_MIN_DECI_C) {
-        ok = false;
+        return false;
       }
     }
 
     if (OPEN_WIRE_BLOCKS_BMS_OK && hasOpenWireFault(ic)) {
-      ok = false;
+      return false;
     }
   }
 
-  return ok;
+  return true;
 }
 
 void recomputeDischargeRequests() {
@@ -526,67 +524,68 @@ void sendTemperatureFrame(uint8_t ic) {
   sendCanFrame(CAN_ID_TEMP_BASE + ic, payload, sizeof(payload));
 }
 
-void sendStatusFrame(uint8_t ic, bool bms_ok) {
-  uint16_t min_code = 0xFFFF;
-  uint16_t max_code = 0;
-  uint32_t balance_mask = discharge_mask[ic] & 0x1FFFFUL;
+void sendStatusFrame(bool bms_ok) {
+  uint16_t pack_min_code = 0xFFFF;
+  uint16_t pack_max_code = 0;
+  uint8_t pack_fault_bits = 0;
+  uint8_t pack_balance_ic_mask = 0;
 
-  for (uint8_t cell = 0; cell < ACTIVE_CELLS_PER_IC; ++cell) {
-    const uint16_t code = BMS_IC[ic].cells.c_codes[cell];
-    if (code < min_code) {
-      min_code = code;
-    }
-    if (code > max_code) {
-      max_code = code;
-    }
-  }
-
-  uint8_t fault_bits = 0;
   if (!bms_ok) {
-    fault_bits |= 0x01;
+    pack_fault_bits |= 0x01;
   }
 
-  for (uint8_t ntc = 0; ntc < NTC_PER_IC; ++ntc) {
-    const int16_t temp = ntc_temperature_deci_c[ic][ntc];
-    if (temp == INT16_MAX || temp < TEMP_MIN_DECI_C) {
-      fault_bits |= 0x02;
+  for (uint8_t ic = 0; ic < TOTAL_IC; ++ic) {
+    if (discharge_mask[ic] > 0) {
+      pack_balance_ic_mask |= (1 << ic);
     }
-    if (temp > TEMP_MAX_DECI_C) {
-      fault_bits |= 0x04;
-    }
-  }
 
-  for (uint8_t cell = 0; cell < ACTIVE_CELLS_PER_IC; ++cell) {
-    const uint16_t code = BMS_IC[ic].cells.c_codes[cell];
-    if (code < CELL_OK_MIN_CODE || code > CELL_OK_MAX_CODE) {
-      fault_bits |= 0x08;
-      break;
+    for (uint8_t ntc = 0; ntc < NTC_PER_IC; ++ntc) {
+      const int16_t temp = ntc_temperature_deci_c[ic][ntc];
+      if (temp == INT16_MAX || temp < TEMP_MIN_DECI_C) {
+        pack_fault_bits |= 0x02;
+      }
+      if (temp > TEMP_MAX_DECI_C) {
+        pack_fault_bits |= 0x04;
+      }
     }
-  }
 
-  if (hasOpenWireFault(ic)) {
-    fault_bits |= 0x10;
+    for (uint8_t cell = 0; cell < ACTIVE_CELLS_PER_IC; ++cell) {
+      const uint16_t code = BMS_IC[ic].cells.c_codes[cell];
+      if (code < pack_min_code) {
+        pack_min_code = code;
+      }
+      if (code > pack_max_code) {
+        pack_max_code = code;
+      }
+      if (code < CELL_OK_MIN_CODE || code > CELL_OK_MAX_CODE) {
+        pack_fault_bits |= 0x08;
+      }
+    }
+
+    if (hasOpenWireFault(ic)) {
+      pack_fault_bits |= 0x10;
+    }
   }
 
   uint8_t payload[8];
-  payload[0] = fault_bits;
-  payload[1] = static_cast<uint8_t>(balance_mask & 0xFF);
-  payload[2] = static_cast<uint8_t>((balance_mask >> 8) & 0xFF);
-  payload[3] = static_cast<uint8_t>((balance_mask >> 16) & 0x01);
-  payload[4] = static_cast<uint8_t>(min_code & 0xFF);
-  payload[5] = static_cast<uint8_t>(min_code >> 8);
-  payload[6] = static_cast<uint8_t>(max_code & 0xFF);
-  payload[7] = static_cast<uint8_t>(max_code >> 8);
+  payload[0] = pack_fault_bits;
+  payload[1] = pack_balance_ic_mask;
+  payload[2] = 0;
+  payload[3] = 0;
+  payload[4] = static_cast<uint8_t>(pack_min_code & 0xFF);
+  payload[5] = static_cast<uint8_t>(pack_min_code >> 8);
+  payload[6] = static_cast<uint8_t>(pack_max_code & 0xFF);
+  payload[7] = static_cast<uint8_t>(pack_max_code >> 8);
 
-  sendCanFrame(CAN_ID_STATUS_BASE + ic, payload, sizeof(payload));
+  sendCanFrame(CAN_ID_STATUS_BASE, payload, sizeof(payload));
 }
 
 void sendAllCan(bool bms_ok) {
   for (uint8_t ic = 0; ic < TOTAL_IC; ++ic) {
     sendCellFrames(ic);
     sendTemperatureFrame(ic);
-    sendStatusFrame(ic, bms_ok);
   }
+  sendStatusFrame(bms_ok);
 }
 
 void initializeBms() {
