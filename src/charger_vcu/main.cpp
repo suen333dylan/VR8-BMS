@@ -737,11 +737,9 @@ void Update_Charging_State()
     static bool lastButtonState = HIGH; // Assuming INPUT_PULLUP
     uint32_t nowMs = millis();
 
-    // Check button state (simple debounce check)
     bool currentButtonState = digitalRead(kStartButtonPin);
     bool buttonPressed = (currentButtonState == HIGH && lastButtonState == LOW);
     lastButtonState = currentButtonState; // Update for next cycle
-    buttonPressed = true;
 
     // Check if BMS is normal and Precharge is valid (read live signal)
     // bool bmsReady = isBatteryHealthy();
@@ -798,10 +796,10 @@ void Update_Charging_State()
         // Transition to START if:
         // 1. BMS is normal AND Precharge is valid AND button pressed
         // Additionally require a prior Serial "start" command
-        if (prechargeValid && buttonPressed && serialStartRequested)
+        if (prechargeValid && (buttonPressed || serialStartRequested))
         {
             bms_t.charging_states = CHARGING_START;
-            Serial.println("STATE: -> START (Button Pressed & Serial 'start' received, Conditions Met)");
+            Serial.println("STATE: -> START (Conditions Met)");
             // consume the serial start request once used
             serialStartRequested = false;
         }

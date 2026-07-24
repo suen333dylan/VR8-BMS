@@ -57,7 +57,6 @@ typedef struct
 {
     Battery_Volt_Info_t volt_info;
     Battery_Temp_Info_t temp_info;
-    Battery_Status_Info_t status_info;
     uint32_t CAN_signal_lost_count;
 } BMS_IC_info_t;
 
@@ -85,6 +84,10 @@ typedef struct{
     bool over_temperature;
     bool signal_lost;
     bool bms_fault;
+    uint8_t pack_fault_bits;
+    uint8_t pack_balance_mask;
+    uint32_t pack_min_voltage;
+    uint32_t pack_max_voltage;
 }BMS_t;
 
 #endif
@@ -99,3 +102,4 @@ void BMS_Update_Data();
 // 在 BMS.h 的末尾附近
 void BMS_Print_Diagnostics();
 void BMS_Print_Cell_Voltages();
+void BMS_Print_Temperature();

@@ -37,14 +37,12 @@ void BMS_Init()
         for(uint8_t ntc = 0; ntc < NTC_PER_IC; ntc++){
             bms_ic_info[ic].temp_info.temperatures[ntc] = 0;
         }
-        
-        // Initialize status data
-        bms_ic_info[ic].status_info.fault_bits = 0;
-        bms_ic_info[ic].status_info.fault_state = NORMAL;
-        bms_ic_info[ic].status_info.balance_mask = 0;
-        bms_ic_info[ic].status_info.min_voltage = 0;
-        bms_ic_info[ic].status_info.max_voltage = 0;
     }
+    // Initialize pack status
+    bms_t.pack_fault_bits = 0;
+    bms_t.pack_balance_mask = 0;
+    bms_t.pack_min_voltage = 0;
+    bms_t.pack_max_voltage = 0;
 }
 
 /**
@@ -54,16 +52,17 @@ void BMS_Init()
 BMS_STATES BMS_Check_Fault()
 {
     // Priority 1: Sensor faults (voltage/temperature issues)
-    for(uint8_t ic = 0; ic < NUM_IC; ic++){
-        if(bms_ic_info[ic].status_info.fault_state == SENSOR_FAULT ||
-           bms_ic_info[ic].status_info.fault_state == OVER_TEMPERATURE ||
-           bms_ic_info[ic].status_info.fault_state == VOLTAGE_OUT_OF_RANGE){
-            return BMS_SENSOR_FAULT;
-        }
+    if(bms_t.pack_fault_bits & 0x1E){ // Check bits 1-4
+        return BMS_SENSOR_FAULT;
     }
     
     // Priority 2: Communication faults (signal lost)
     if(bms_t.signal_lost){
+        return BMS_FAULT;
+    }
+    
+    // Priority 3: General BMS fault
+    if(bms_t.pack_fault_bits & 0x01){ // Bit 0 is !BMS_OK
         return BMS_FAULT;
     }
     
@@ -94,62 +93,23 @@ void BMS_Update_Volt(){
 
 void BMS_Update_State(){
     bms_t.signal_lost = false;  // Reset signal_lost flag before checking
-    bms_t.over_temperature = false;  // Reset temperature flag
-    bms_t.bms_fault = false;  // Reset overall fault flag
     
     for(uint8_t ic = 0; ic < NUM_IC; ic++){
         // Increment signal lost counter ONLY if this IC has not received messages
-        // The counter is reset to 0 when a message is received (via BMS_Reset_Signal_Lost_Count)
         if(bms_ic_info[ic].CAN_signal_lost_count < UINT32_MAX){
             bms_ic_info[ic].CAN_signal_lost_count++;
         }
         
         // Check if signal is lost for this IC based on counter threshold
-        bool ic_signal_lost = (bms_ic_info[ic].CAN_signal_lost_count > BMS_SIGNAL_THRESHOLD);
-        
-        // Decode fault bits according to the BMS status definition:
-        // Bit 0: !BMS_OK -> general fault
-        // Bit 1: Temp Range ERR -> sensor fault
-        // Bit 2: Over Temp -> over temperature
-        // Bit 3: Cell range ERR -> voltage out of range
-        // Bit 4: Open Wire -> sensor fault
-        uint8_t fault_bits = bms_ic_info[ic].status_info.fault_bits;
-        
-        // Determine fault state for this IC based on CAN loss first, then fault bits
-        FAULT_STATES ic_fault_state = NORMAL;
-        if(ic_signal_lost){
-            ic_fault_state = SIGNAL_LOST;
-        }
-        else if(fault_bits & 0x01){  // !BMS_OK
-            ic_fault_state = SENSOR_FAULT;
-        }
-        else if(fault_bits & 0x02){  // Temp Range ERR
-            ic_fault_state = SENSOR_FAULT;
-        }
-        else if(fault_bits & 0x04){  // Over Temp
-            ic_fault_state = OVER_TEMPERATURE;
-        }
-        else if(fault_bits & 0x08){  // Cell range ERR
-            ic_fault_state = VOLTAGE_OUT_OF_RANGE;
-        }
-        else if(fault_bits & 0x10){  // Open Wire
-            ic_fault_state = SENSOR_FAULT;
-        }
-        
-        // Update IC fault state
-        bms_ic_info[ic].status_info.fault_state = ic_fault_state;
-        
-        // Update overall BMS flags based on fault bits / state only
-        if(ic_fault_state == SIGNAL_LOST){
+        if(bms_ic_info[ic].CAN_signal_lost_count > BMS_SIGNAL_THRESHOLD){
             bms_t.signal_lost = true;
         }
-        if(ic_fault_state == OVER_TEMPERATURE){
-            bms_t.over_temperature = true;
-        }
-        if(ic_fault_state != NORMAL){
-            bms_t.bms_fault = true;
-        }
     }
+
+    // Decode pack fault bits
+    uint8_t fault_bits = bms_t.pack_fault_bits;
+    bms_t.over_temperature = (fault_bits & 0x04) != 0;
+    bms_t.bms_fault = (fault_bits != 0) || bms_t.signal_lost;
 
     // Update overall BMS state based on fault state rather than computed voltages/temps
     bms_t.bms_states = BMS_Check_Fault();
@@ -173,16 +133,16 @@ void BMS_Get_CAN_Message(const twai_message_t *message)
     
     uint16_t id = static_cast<uint16_t>(message->identifier);
 
-    // Only process messages in valid CAN ID range
-    if (id < 0x100 || id > 0x2FF) return;
+    // Only process messages in valid CAN ID range (Extended frames from VR8-BMS)
+    if (id < 0x1100 || id > 0x14FF) return;
 
     const uint8_t *data = message->data;
 
     if ((id & 0xFF00) == CAN_ID_CELL_BASE)
     {
-        // Process cell voltage message for IC ic
-        // CAN ID format: 0x1XY where X = IC number, Y = frame number
-        uint8_t ic = static_cast<uint8_t>((id >> 4) & 0x00F);
+        // Process cell voltage message for IC
+        // CAN ID format: 0x11XY where X = IC number, Y = frame number
+        uint8_t ic = static_cast<uint8_t>((id >> 4) & 0x000F);
         
         // Validate IC index
         if(ic >= NUM_IC) return;
@@ -204,7 +164,7 @@ void BMS_Get_CAN_Message(const twai_message_t *message)
     else if ((id & 0xFFF0) == CAN_ID_TEMP_BASE)
     {
         // Process temperature message for IC
-        // CAN ID format: 0x2XY where X = reserved, Y = IC number
+        // CAN ID format: 0x120Y where Y = IC number
         uint8_t ic = static_cast<uint8_t>(id & 0x000F); // Extract IC number from ID
         
         // Validate IC index
@@ -221,31 +181,19 @@ void BMS_Get_CAN_Message(const twai_message_t *message)
             bms_ic_info[ic].temp_info.temperatures[i] = temp_deci_c;
         }
     }
-    else if ((id & 0xFFF0) == CAN_ID_STATUS_BASE)
+    else if (id == CAN_ID_STATUS_BASE)
     {
-        // Process status message for IC
-        // CAN ID format: 0x24Y where Y = IC number
-        uint8_t ic = static_cast<uint8_t>(id & 0x000F);
-        
-        // Validate IC index
-        if(ic >= NUM_IC) return;
-        
-        // Reset signal lost counter since we received a message from this IC
-        BMS_Reset_Signal_Lost_Count(ic);
-        
+        // Process pack-level status message
         // Extract status information from data bytes
-        bms_ic_info[ic].status_info.fault_bits = data[0];
-        bms_ic_info[ic].status_info.balance_mask = ((uint32_t)data[3] << 16) |
-                                                    ((uint32_t)data[2] << 8) |
-                                                    data[1];
-        bms_ic_info[ic].status_info.balance_mask &= 0x0001FFFFu; // 17-bit balance mask
+        bms_t.pack_fault_bits = data[0];
+        bms_t.pack_balance_mask = data[1]; // IC balance mask
         
         // Extract and convert min/max voltages
         uint16_t min_code = (data[5] << 8) | data[4];
-        bms_ic_info[ic].status_info.min_voltage = static_cast<uint32_t>(min_code) * CODE_TO_VOLT * 1000; // Store as mV
+        bms_t.pack_min_voltage = static_cast<uint32_t>(min_code) * CODE_TO_VOLT * 1000; // Store as mV
         
         uint16_t max_code = (data[7] << 8) | data[6];
-        bms_ic_info[ic].status_info.max_voltage = static_cast<uint32_t>(max_code) * CODE_TO_VOLT * 1000; // Store as mV
+        bms_t.pack_max_voltage = static_cast<uint32_t>(max_code) * CODE_TO_VOLT * 1000; // Store as mV
     }
 }
 
@@ -289,33 +237,10 @@ void BMS_Print_Diagnostics() {
             continue; 
         }
         
-        // IC is online, check for specific faults
-        bool ic_has_issue = false;
-        FAULT_STATES fault_state = bms_ic_info[ic].status_info.fault_state;
+        // IC is online, check for specific faults (no longer per-IC in latest BMS, so just print online status)
+        Serial.println("ONLINE");
         
-        switch(fault_state) {
-            case SIGNAL_LOST:
-                Serial.println("SIGNAL LOST");
-                ic_has_issue = true;
-                break;
-            case SENSOR_FAULT:
-                Serial.println("SENSOR FAULT");
-                ic_has_issue = true;
-                break;
-            case OVER_TEMPERATURE:
-                Serial.println("OVER TEMPERATURE");
-                ic_has_issue = true;
-                break;
-            case VOLTAGE_OUT_OF_RANGE:
-                Serial.println("VOLTAGE OUT OF RANGE");
-                ic_has_issue = true;
-                break;
-            case NORMAL:
-                Serial.println("NORMAL");
-                break;
-        }
-        
-        if (!ic_has_issue) {
+        if (true) {
             // Additional checks for online and normally-reporting ICs
             bool voltage_issue = false;
             for (uint8_t j = 0; j < ACTIVE_CELLS_PER_IC; j++) {
