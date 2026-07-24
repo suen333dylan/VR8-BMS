@@ -15,8 +15,6 @@ public:
     
 private:
     static int16_t temperatureFromAuxCode(uint16_t aux_code, uint16_t vref2_code);
-    static void printIcReport(const BmsState& state, uint8_t ic);
     static void printTemperatureValue(int16_t temp_deci_c);
     static void printOpenWireStatus(const BmsState& state, uint8_t ic);
-    static void printBalanceCells(const BmsState& state, uint8_t ic);
 };

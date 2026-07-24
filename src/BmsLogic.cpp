@@ -133,56 +133,156 @@ void BmsLogic::printOpenWireStatus(const BmsState& state, uint8_t ic) {
     Serial.print(state.open_wire_channel[ic]);
 }
 
-void BmsLogic::printBalanceCells(const BmsState& state, uint8_t ic) {
-    bool first = true;
-    for (uint8_t cell = 0; cell < BmsConfig::ACTIVE_CELLS_PER_IC; ++cell) {
-        if (!((state.discharge_mask[ic] >> cell) & 1)) continue;
-        if (!first) Serial.print(',');
-        Serial.print(cell + 1);
-        first = false;
-    }
-    if (first) Serial.print(F("none"));
-}
 
-void BmsLogic::printIcReport(const BmsState& state, uint8_t ic) {
-    uint16_t min_code = 0xFFFF;
-    uint16_t max_code = 0;
-    uint8_t min_cell = 0;
-    uint8_t max_cell = 0;
-    for (uint8_t cell = 0; cell < BmsConfig::ACTIVE_CELLS_PER_IC; ++cell) {
-        const uint16_t code = state.ic[ic].cells.c_codes[cell];
-        if (code < min_code) { min_code = code; min_cell = cell; }
-        if (code > max_code) { max_code = code; max_cell = cell; }
-    }
-    Serial.print(F("IC")); Serial.print(ic + 1); Serial.print(F(" Cells: "));
-    for (uint8_t cell = 0; cell < BmsConfig::ACTIVE_CELLS_PER_IC; ++cell) {
-        if (cell > 0) Serial.print(F(", "));
-        Serial.print(F("C")); Serial.print(cell + 1); Serial.print('=');
-        Serial.print(state.ic[ic].cells.c_codes[cell] * BmsConfig::CODE_TO_VOLT, 4); Serial.print(F("V"));
-    }
-    Serial.println();
-    Serial.print(F("IC")); Serial.print(ic + 1); Serial.print(F(" Temps: "));
-    for (uint8_t ntc = 0; ntc < BmsConfig::NTC_PER_IC; ++ntc) {
-        if (ntc > 0) Serial.print(F(", "));
-        Serial.print(F("T")); Serial.print(ntc + 1); Serial.print('=');
-        printTemperatureValue(state.ntc_temperature_deci_c[ic][ntc]);
-    }
-    Serial.println();
-    Serial.print(F("IC")); Serial.print(ic + 1); Serial.print(F(" Range: min=C"));
-    Serial.print(min_cell + 1); Serial.print('('); Serial.print(min_code * BmsConfig::CODE_TO_VOLT, 4);
-    Serial.print(F("V), max=C")); Serial.print(max_cell + 1); Serial.print('(');
-    Serial.print(max_code * BmsConfig::CODE_TO_VOLT, 4); Serial.print(F("V), balance="));
-    printBalanceCells(state, ic); Serial.print(F(", open-wire="));
-    printOpenWireStatus(state, ic); Serial.println();
-}
 
 void BmsLogic::printCycleReport(const BmsState& state) {
-    Serial.println();
-    Serial.print(F("=== BMS Time ")); Serial.print(millis()); Serial.println(F(" ms ==="));
-    Serial.print(F("BMS_OK=")); Serial.print(state.bms_ok ? F("HIGH") : F("LOW"));
-    Serial.print(F(", CAN=")); Serial.print(state.can_ready ? F("OK") : F("FAIL"));
-    Serial.print(F(", Discharge=")); Serial.println(state.discharge_enabled ? F("ENABLED") : F("DISABLED"));
+    Serial.println(F("\n================================================================================"));
+    Serial.print(F(" BMS Uptime: ")); Serial.print(millis() / 1000); Serial.print(F("s | "));
+    Serial.print(F("BMS_OK: ")); Serial.print(state.bms_ok ? F("YES") : F("NO ")); Serial.print(F(" | "));
+    Serial.print(F("CAN: ")); Serial.print(state.can_ready ? F("OK  ") : F("FAIL")); Serial.print(F(" | "));
+    Serial.print(F("Discharge: ")); Serial.print(state.discharge_enabled ? F("ON ") : F("OFF"));
+    Serial.println(F("\n------------------------------------------------------------------------------------------"));
+    
+    Serial.println(F(" IC | V_Min      | V_Max      | T_Min     |   T_Max   | Balance      | OW"));
+    Serial.println(F("----+------------+------------+-----------+-----------+--------------+------"));
+    
+    uint16_t pack_min = 0xFFFF, pack_max = 0;
+    uint8_t pack_min_ic = 0, pack_min_cell = 0;
+    uint8_t pack_max_ic = 0, pack_max_cell = 0;
+    
+    int16_t pack_t_min = INT16_MAX, pack_t_max = INT16_MIN;
+    uint8_t pack_t_min_ic = 0, pack_t_min_ntc = 0;
+    uint8_t pack_t_max_ic = 0, pack_t_max_ntc = 0;
+
     for (uint8_t ic = 0; ic < BmsConfig::TOTAL_IC; ++ic) {
-        printIcReport(state, ic);
+        uint16_t ic_min = 0xFFFF, ic_max = 0;
+        uint8_t ic_min_c = 0, ic_max_c = 0;
+        
+        for (uint8_t cell = 0; cell < BmsConfig::ACTIVE_CELLS_PER_IC; ++cell) {
+            uint16_t code = state.ic[ic].cells.c_codes[cell];
+            if (code < ic_min) { ic_min = code; ic_min_c = cell; }
+            if (code > ic_max) { ic_max = code; ic_max_c = cell; }
+        }
+        if (ic_min < pack_min) { pack_min = ic_min; pack_min_ic = ic; pack_min_cell = ic_min_c; }
+        if (ic_max > pack_max) { pack_max = ic_max; pack_max_ic = ic; pack_max_cell = ic_max_c; }
+        
+        int16_t ic_t_min = INT16_MAX, ic_t_max = INT16_MIN;
+        uint8_t ic_t_min_n = 0, ic_t_max_n = 0;
+        for (uint8_t ntc = 0; ntc < BmsConfig::NTC_PER_IC; ++ntc) {
+            int16_t temp = state.ntc_temperature_deci_c[ic][ntc];
+            if (temp != INT16_MAX) {
+                if (temp < ic_t_min) { ic_t_min = temp; ic_t_min_n = ntc; }
+                if (temp > ic_t_max) { ic_t_max = temp; ic_t_max_n = ntc; }
+            }
+        }
+        if (ic_t_min != INT16_MAX && ic_t_min < pack_t_min) { pack_t_min = ic_t_min; pack_t_min_ic = ic; pack_t_min_ntc = ic_t_min_n; }
+        if (ic_t_max != INT16_MIN && ic_t_max > pack_t_max) { pack_t_max = ic_t_max; pack_t_max_ic = ic; pack_t_max_ntc = ic_t_max_n; }
+
+        Serial.print(F(" "));
+        if (ic + 1 < 10) Serial.print(F(" "));
+        Serial.print(ic + 1); Serial.print(F(" | "));
+        
+        Serial.print(F("C")); 
+        if (ic_min_c + 1 < 10) Serial.print(F("0"));
+        Serial.print(ic_min_c + 1);
+        Serial.print(F("(")); Serial.print(ic_min * BmsConfig::CODE_TO_VOLT, 3); Serial.print(F(") | "));
+        
+        Serial.print(F("C")); 
+        if (ic_max_c + 1 < 10) Serial.print(F("0"));
+        Serial.print(ic_max_c + 1);
+        Serial.print(F("(")); Serial.print(ic_max * BmsConfig::CODE_TO_VOLT, 3); Serial.print(F(") | "));
+
+        if (ic_t_min != INT16_MAX) {
+            Serial.print(F("T")); Serial.print(ic_t_min_n + 1); Serial.print(F("(")); 
+            printTemperatureValue(ic_t_min); Serial.print(F(") | "));
+        } else {
+            Serial.print(F("ERR     | "));
+        }
+        
+        if (ic_t_max != INT16_MIN) {
+            Serial.print(F("T")); Serial.print(ic_t_max_n + 1); Serial.print(F("(")); 
+            printTemperatureValue(ic_t_max); Serial.print(F(") | "));
+        } else {
+            Serial.print(F("ERR     | "));
+        }
+        
+        uint8_t bal_count = 0;
+        for (uint8_t cell = 0; cell < BmsConfig::ACTIVE_CELLS_PER_IC; ++cell) {
+            if ((state.discharge_mask[ic] >> cell) & 1) bal_count++;
+        }
+        if (bal_count == 0) {
+            Serial.print(F("none         | "));
+        } else {
+            if (bal_count < 10) Serial.print(F(" "));
+            Serial.print(bal_count); Serial.print(F(" cells      | "));
+        }
+        
+        printOpenWireStatus(state, ic);
+        Serial.println();
     }
+    
+    Serial.println(F("------------------------------------------------------------------------------------------"));
+    Serial.print(F(" Pack V_Min: ")); Serial.print(pack_min * BmsConfig::CODE_TO_VOLT, 4); 
+    Serial.print(F("V (IC")); Serial.print(pack_min_ic + 1); Serial.print(F(" C")); 
+    if (pack_min_cell + 1 < 10) Serial.print(F("0"));
+    Serial.print(pack_min_cell + 1);
+    Serial.print(F(")   |   Pack V_Max: ")); Serial.print(pack_max * BmsConfig::CODE_TO_VOLT, 4);
+    Serial.print(F("V (IC")); Serial.print(pack_max_ic + 1); Serial.print(F(" C")); 
+    if (pack_max_cell + 1 < 10) Serial.print(F("0"));
+    Serial.print(pack_max_cell + 1);
+    Serial.print(F(")   |   Delta: ")); Serial.print((pack_max - pack_min) * BmsConfig::CODE_TO_VOLT, 4); Serial.println(F("V"));
+    
+    Serial.print(F(" Pack T_Min: ")); 
+    if (pack_t_min != INT16_MAX) {
+        printTemperatureValue(pack_t_min); 
+        Serial.print(F(" (IC")); Serial.print(pack_t_min_ic + 1); Serial.print(F(" T")); Serial.print(pack_t_min_ntc + 1); Serial.print(F(")"));
+    } else {
+        Serial.print(F("ERR"));
+    }
+    Serial.print(F("         |   Pack T_Max: ")); 
+    if (pack_t_max != INT16_MIN) {
+        printTemperatureValue(pack_t_max);
+        Serial.print(F(" (IC")); Serial.print(pack_t_max_ic + 1); Serial.print(F(" T")); Serial.print(pack_t_max_ntc + 1); Serial.print(F(")"));
+    } else {
+        Serial.print(F("ERR"));
+    }
+    Serial.println();
+    Serial.println(F("=========================================================================================="));
+
+    if (state.detail_mode) {
+        Serial.println(F("\n[ Detailed Cell Voltages & Balance States ]"));
+        Serial.print(F("IC | "));
+        for (uint8_t c = 0; c < BmsConfig::ACTIVE_CELLS_PER_IC; ++c) {
+            Serial.print(F("C"));
+            if (c + 1 < 10) Serial.print(F("0"));
+            Serial.print(c + 1);
+            Serial.print(F("    | "));
+        }
+        for (uint8_t ntc = 0; ntc < BmsConfig::NTC_PER_IC; ++ntc) {
+            Serial.print(F("T")); Serial.print(ntc + 1); Serial.print(F("    | "));
+        }
+        Serial.println();
+        
+        for (uint8_t ic = 0; ic < BmsConfig::TOTAL_IC; ++ic) {
+            if (ic + 1 < 10) Serial.print(F(" "));
+            Serial.print(ic + 1); Serial.print(F(" | "));
+            for (uint8_t c = 0; c < BmsConfig::ACTIVE_CELLS_PER_IC; ++c) {
+                float v = state.ic[ic].cells.c_codes[c] * BmsConfig::CODE_TO_VOLT;
+                Serial.print(v, 3);
+                bool balancing = (state.discharge_mask[ic] >> c) & 1;
+                Serial.print(balancing ? F("* | ") : F("  | "));
+            }
+            for (uint8_t ntc = 0; ntc < BmsConfig::NTC_PER_IC; ++ntc) {
+                int16_t temp = state.ntc_temperature_deci_c[ic][ntc];
+                if (temp != INT16_MAX) {
+                    if (temp >= 0 && temp < 100) Serial.print(F(" "));
+                }
+                printTemperatureValue(temp);
+                Serial.print(F(" | "));
+            }
+            Serial.println();
+        }
+        Serial.println(F("Note: '*' indicates cell is actively balancing."));
+    }
+    Serial.println();
 }

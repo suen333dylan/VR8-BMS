@@ -16,13 +16,15 @@ struct BmsState {
     bool discharge_enabled;
     uint32_t cycle_count;
     uint32_t first_error_state_ms;
+    bool detail_mode;
 
     BmsState() : 
         can_ready(false), 
         bms_ok(false), 
         discharge_enabled(false), 
         cycle_count(0), 
-        first_error_state_ms(0) 
+        first_error_state_ms(0),
+        detail_mode(false)
     {
         for (uint8_t i = 0; i < BmsConfig::TOTAL_IC; ++i) {
             discharge_mask[i] = 0;
