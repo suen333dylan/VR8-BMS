@@ -71,5 +71,10 @@ CAN Bus 通訊相關的 ID 與資料解析，請參考專案根目錄下的 `vr8
 
 這些 ID 皆定義為擴展幀 (Extended Frame)，傳送頻率預設為 `200ms`。
 
+## Charger VCU (充電控制單元)
+
+本專案同時包含了 Charger VCU 的韌體（用於與車載充電器 OBC 通訊及控制充電），設定為 `env:charger_vcu`。
+關於 Charger VCU 的使用與編譯說明，請參考 [Charger VCU 使用說明](src/charger_vcu/README_zh-TW.md)。
+
 ---
 *Developed for the VR8 Project.*

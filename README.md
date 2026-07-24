@@ -71,5 +71,10 @@ The default CAN message Base IDs (in Hexadecimal) are:
 
 All IDs are configured as Extended Frames, with a default transmission interval of `200ms`.
 
+## Charger VCU
+
+This project also includes the Charger VCU firmware (used to communicate with the On-Board Charger (OBC) and control charging), configured under `env:charger_vcu`.
+For instructions on using and building the Charger VCU, please refer to the [Charger VCU Usage Instructions](src/charger_vcu/README.md).
+
 ---
 *Developed for the VR8 Project.*
