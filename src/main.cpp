@@ -8,32 +8,50 @@
 #include "BmsLogic.h"
 #include "BmsCan.h"
 
-MCP_CAN can_bus(BmsConfig::CAN_CS_PIN);
+MCP_CAN  can_bus(BmsConfig::CAN_CS_PIN);
 BmsState bmsState;
 
-uint32_t last_poll_ms = 0;
-uint32_t last_balance_ms = 0;
-uint32_t last_can_tx_ms = 0;
+uint32_t last_poll_ms      = 0;
+uint32_t last_balance_ms   = 0;
+uint32_t last_can_tx_ms    = 0;
 uint32_t last_open_wire_ms = 0;
 
 void printStartupSummary() {
     Serial.println(F("========================================="));
     Serial.println(F("          VR8-BMS Startup Summary        "));
     Serial.println(F("========================================="));
-    Serial.print(F(" - Total ICs:                ")); Serial.println(BmsConfig::TOTAL_IC);
-    Serial.print(F(" - Active Cells per IC:      ")); Serial.println(BmsConfig::ACTIVE_CELLS_PER_IC);
-    Serial.print(F(" - Physical Channels per IC: ")); Serial.println(BmsConfig::TOTAL_CELL_CHANNELS);
-    Serial.print(F(" - NTC Thermistors per IC:   ")); Serial.println(BmsConfig::NTC_PER_IC);
+    Serial.print(F(" - Total ICs:                "));
+    Serial.println(BmsConfig::TOTAL_IC);
+    Serial.print(F(" - Active Cells per IC:      "));
+    Serial.println(BmsConfig::ACTIVE_CELLS_PER_IC);
+    Serial.print(F(" - Physical Channels per IC: "));
+    Serial.println(BmsConfig::TOTAL_CELL_CHANNELS);
+    Serial.print(F(" - NTC Thermistors per IC:   "));
+    Serial.println(BmsConfig::NTC_PER_IC);
     Serial.println(F("-----------------------------------------"));
-    Serial.print(F(" - Cell OK Min Voltage:      ")); Serial.print(BmsConfig::CELL_OK_MIN_CODE * BmsConfig::CODE_TO_VOLT, 3); Serial.println(F(" V"));
-    Serial.print(F(" - Cell OK Max Voltage:      ")); Serial.print(BmsConfig::CELL_OK_MAX_CODE * BmsConfig::CODE_TO_VOLT, 3); Serial.println(F(" V"));
-    Serial.print(F(" - Balance Delta Threshold:  ")); Serial.print(BmsConfig::BALANCE_DELTA_CODE * BmsConfig::CODE_TO_VOLT, 3); Serial.println(F(" V"));
-    Serial.print(F(" - Temp OK Range:            ")); Serial.print(BmsConfig::TEMP_MIN_DECI_C / 10.0f, 1); Serial.print(F(" ~ ")); Serial.print(BmsConfig::TEMP_MAX_DECI_C / 10.0f, 1); Serial.println(F(" C"));
+    Serial.print(F(" - Cell OK Min Voltage:      "));
+    Serial.print(BmsConfig::CELL_OK_MIN_CODE * BmsConfig::CODE_TO_VOLT, 3);
+    Serial.println(F(" V"));
+    Serial.print(F(" - Cell OK Max Voltage:      "));
+    Serial.print(BmsConfig::CELL_OK_MAX_CODE * BmsConfig::CODE_TO_VOLT, 3);
+    Serial.println(F(" V"));
+    Serial.print(F(" - Balance Delta Threshold:  "));
+    Serial.print(BmsConfig::BALANCE_DELTA_CODE * BmsConfig::CODE_TO_VOLT, 3);
+    Serial.println(F(" V"));
+    Serial.print(F(" - Temp OK Range:            "));
+    Serial.print(BmsConfig::TEMP_MIN_DECI_C / 10.0f, 1);
+    Serial.print(F(" ~ "));
+    Serial.print(BmsConfig::TEMP_MAX_DECI_C / 10.0f, 1);
+    Serial.println(F(" C"));
     Serial.println(F("-----------------------------------------"));
-    Serial.print(F(" - Open Wire Diagnostic:     ")); Serial.println(BmsConfig::OPEN_WIRE_ENABLED ? F("ENABLED") : F("DISABLED"));
+    Serial.print(F(" - Open Wire Diagnostic:     "));
+    Serial.println(BmsConfig::OPEN_WIRE_ENABLED ? F("ENABLED") : F("DISABLED"));
     if (BmsConfig::OPEN_WIRE_ENABLED) {
-        Serial.print(F("   * Interval:               ")); Serial.print(BmsConfig::OPEN_WIRE_INTERVAL_MS); Serial.println(F(" ms"));
-        Serial.print(F("   * Blocks BMS_OK:          ")); Serial.println(BmsConfig::OPEN_WIRE_BLOCKS_BMS_OK ? F("YES") : F("NO"));
+        Serial.print(F("   * Interval:               "));
+        Serial.print(BmsConfig::OPEN_WIRE_INTERVAL_MS);
+        Serial.println(F(" ms"));
+        Serial.print(F("   * Blocks BMS_OK:          "));
+        Serial.println(BmsConfig::OPEN_WIRE_BLOCKS_BMS_OK ? F("YES") : F("NO"));
     }
     Serial.println(F("=========================================\n"));
 }
@@ -69,7 +87,7 @@ void setup() {
     if (!bmsState.can_ready) {
         Serial.println(F("MCP2515 init failed"));
     }
-    
+
     printStartupSummary();
 }
 
@@ -86,10 +104,10 @@ void loop() {
     const uint32_t now = millis();
 
     if (last_poll_ms == 0 || now - last_poll_ms >= BmsConfig::POLL_INTERVAL_MS) {
-        last_poll_ms = now;
+        last_poll_ms  = now;
         bool cells_ok = LtcController::measureCells(bmsState);
-        bool aux_ok = LtcController::measureAux(bmsState);
-        
+        bool aux_ok   = LtcController::measureAux(bmsState);
+
         if (!cells_ok || !aux_ok) {
             BmsLogic::clearDischargeRequests(bmsState);
             LtcController::writeConfiguration(bmsState);

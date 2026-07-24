@@ -2,7 +2,7 @@
 #include "BmsState.h"
 
 class BmsLogic {
-public:
+  public:
     static void setBmsOk(BmsState& state, bool ok, bool delay = true);
     static void clearDischargeRequests(BmsState& state);
     static void recomputeDischargeRequests(BmsState& state);
@@ -12,9 +12,9 @@ public:
     static bool computeFaultState(const BmsState& state);
     static void updateTemperatures(BmsState& state);
     static void printCycleReport(const BmsState& state);
-    
-private:
+
+  private:
     static int16_t temperatureFromAuxCode(uint16_t aux_code, uint16_t vref2_code);
-    static void printTemperatureValue(int16_t temp_deci_c);
-    static void printOpenWireStatus(const BmsState& state, uint8_t ic);
+    static void    printTemperatureValue(int16_t temp_deci_c);
+    static void    printOpenWireStatus(const BmsState& state, uint8_t ic);
 };

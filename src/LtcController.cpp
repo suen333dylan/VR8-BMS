@@ -11,7 +11,7 @@ void LtcController::initialize(BmsState& state) {
 
 void LtcController::configureIc(uint8_t ic_index, BmsState& state) {
     bool dcc_a[12] = {false};
-    bool dcc_b[7] = {false};
+    bool dcc_b[7]  = {false};
 
     for (uint8_t cell = 0; cell < BmsConfig::ACTIVE_CELLS_PER_IC; ++cell) {
         if (!((state.discharge_mask[ic_index] >> cell) & 1) || !((state.balance_mask[ic_index] >> cell) & 1)) {
@@ -26,8 +26,8 @@ void LtcController::configureIc(uint8_t ic_index, BmsState& state) {
 
     bool GPIOBITS_A[5] = {true, true, false, false, false};
     bool GPIOBITS_B[4] = {true, true, false, false};
-    bool DCTOBITS[4] = {false, false, false, false};
-    bool PSBITS[2] = {false, false};
+    bool DCTOBITS[4]   = {false, false, false, false};
+    bool PSBITS[2]     = {false, false};
 
     LTC6813_set_cfgr(ic_index, state.ic, true, false, GPIOBITS_A, dcc_a, DCTOBITS, BmsConfig::CELL_OK_MIN_CODE, BmsConfig::CELL_OK_MAX_CODE);
     LTC6813_set_cfgrb(ic_index, state.ic, false, true, PSBITS, GPIOBITS_B, dcc_b);
@@ -88,7 +88,7 @@ void LtcController::runOpenWireDiagnostic(BmsState& state) {
 
     for (uint8_t ic = 0; ic < BmsConfig::TOTAL_IC; ++ic) {
         state.open_wire_channel[ic] = normalizeOpenWireChannel(state.ic[ic].system_open_wire);
-        state.open_wire_valid[ic] = true;
+        state.open_wire_valid[ic]   = true;
         for (uint8_t cell = 0; cell < BmsConfig::TOTAL_CELL_CHANNELS; ++cell) {
             state.ic[ic].cells.c_codes[cell] = saved_codes[ic][cell];
         }

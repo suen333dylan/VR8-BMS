@@ -15,9 +15,9 @@ bool BmsCan::initialize() {
     return false;
 }
 
-bool BmsCan::sendCanFrame(uint16_t id, const uint8_t *data, uint8_t length) {
+bool BmsCan::sendCanFrame(uint16_t id, const uint8_t* data, uint8_t length) {
     for (uint8_t attempt = 0; attempt < 3; ++attempt) {
-        if (can_bus.sendMsgBuf(id, 1, length, const_cast<uint8_t *>(data)) == CAN_OK) {
+        if (can_bus.sendMsgBuf(id, 1, length, const_cast<uint8_t*>(data)) == CAN_OK) {
             return true;
         }
         delay(2);
@@ -31,8 +31,8 @@ void BmsCan::sendCellFrames(const BmsState& state, uint8_t ic) {
         for (uint8_t offset = 0; offset < 4; ++offset) {
             const uint8_t cell = (frame * 4) + offset;
             if (cell >= BmsConfig::ACTIVE_CELLS_PER_IC) break;
-            const uint16_t code = state.ic[ic].cells.c_codes[cell];
-            payload[offset * 2] = static_cast<uint8_t>(code & 0xFF);
+            const uint16_t code       = state.ic[ic].cells.c_codes[cell];
+            payload[offset * 2]       = static_cast<uint8_t>(code & 0xFF);
             payload[(offset * 2) + 1] = static_cast<uint8_t>(code >> 8);
         }
         sendCanFrame(BmsConfig::CAN_ID_CELL_BASE + (ic * 0x10U) + frame, payload, sizeof(payload));
@@ -42,18 +42,18 @@ void BmsCan::sendCellFrames(const BmsState& state, uint8_t ic) {
 void BmsCan::sendTemperatureFrame(const BmsState& state, uint8_t ic) {
     uint8_t payload[8];
     for (uint8_t ntc = 0; ntc < BmsConfig::NTC_PER_IC; ++ntc) {
-        const int16_t temp = state.ntc_temperature_deci_c[ic][ntc];
-        payload[ntc * 2] = static_cast<uint8_t>(temp & 0xFF);
+        const int16_t temp     = state.ntc_temperature_deci_c[ic][ntc];
+        payload[ntc * 2]       = static_cast<uint8_t>(temp & 0xFF);
         payload[(ntc * 2) + 1] = static_cast<uint8_t>((static_cast<uint16_t>(temp) >> 8) & 0xFF);
     }
     sendCanFrame(BmsConfig::CAN_ID_TEMP_BASE + ic, payload, sizeof(payload));
 }
 
 void BmsCan::sendStatusFrame(const BmsState& state) {
-    uint16_t pack_min_code = 0xFFFF;
-    uint16_t pack_max_code = 0;
-    uint8_t pack_fault_bits = FAULT_NONE;
-    uint8_t pack_balance_ic_mask = 0;
+    uint16_t pack_min_code        = 0xFFFF;
+    uint16_t pack_max_code        = 0;
+    uint8_t  pack_fault_bits      = FAULT_NONE;
+    uint8_t  pack_balance_ic_mask = 0;
 
     if (!state.bms_ok) pack_fault_bits |= FAULT_BMS_NOT_OK;
 
@@ -95,12 +95,12 @@ void BmsCan::sendStatusFrame(const BmsState& state) {
 
 void BmsCan::sendBalanceFrame(const BmsState& state, uint8_t ic) {
     uint32_t balance_mask = state.discharge_mask[ic] & 0x1FFFFUL;
-    uint8_t payload[8] = {0};
-    
+    uint8_t  payload[8]   = {0};
+
     payload[0] = static_cast<uint8_t>(balance_mask & 0xFF);
     payload[1] = static_cast<uint8_t>((balance_mask >> 8) & 0xFF);
     payload[2] = static_cast<uint8_t>((balance_mask >> 16) & 0x01);
-    
+
     sendCanFrame(BmsConfig::CAN_ID_BALANCE_BASE + ic, payload, sizeof(payload));
 }
 
