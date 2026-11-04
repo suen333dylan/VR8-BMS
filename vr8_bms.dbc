@@ -171,6 +171,33 @@ BO_ 0x1143 IC5_CellFrame3: 8 BMS
 BO_ 0x1144 IC5_CellFrame4: 8 BMS
  SG_ IC5_Cell_17 : 0|16@1+ (0.0001,0) [0|6.5535] "V" Host
 
+BO_ 0x1150 IC6_CellFrame0: 8 BMS
+ SG_ IC6_Cell_01 : 0|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_02 : 16|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_03 : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_04 : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+
+BO_ 0x1151 IC6_CellFrame1: 8 BMS
+ SG_ IC6_Cell_05 : 0|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_06 : 16|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_07 : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_08 : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+
+BO_ 0x1152 IC6_CellFrame2: 8 BMS
+ SG_ IC6_Cell_09 : 0|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_10 : 16|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_11 : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_12 : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+
+BO_ 0x1153 IC6_CellFrame3: 8 BMS
+ SG_ IC6_Cell_13 : 0|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_14 : 16|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_15 : 32|16@1+ (0.0001,0) [0|6.5535] "V" Host
+ SG_ IC6_Cell_16 : 48|16@1+ (0.0001,0) [0|6.5535] "V" Host
+
+BO_ 0x1154 IC6_CellFrame4: 8 BMS
+ SG_ IC6_Cell_17 : 0|16@1+ (0.0001,0) [0|6.5535] "V" Host
+
 
 BO_ 0x1200 IC1_Temperatures: 8 BMS
  SG_ IC1_Temp_1 : 0|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
@@ -201,6 +228,12 @@ BO_ 0x1204 IC5_Temperatures: 8 BMS
  SG_ IC5_Temp_2 : 16|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
  SG_ IC5_Temp_3 : 32|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
  SG_ IC5_Temp_4 : 48|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
+
+BO_ 0x1205 IC6_Temperatures: 8 BMS
+ SG_ IC6_Temp_1 : 0|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
+ SG_ IC6_Temp_2 : 16|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
+ SG_ IC6_Temp_3 : 32|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
+ SG_ IC6_Temp_4 : 48|16@1- (0.1,0) [-3276.8|3276.7] "degC" Host
 
 
 BO_ 0x1300 Pack_Status: 8 BMS
@@ -239,6 +272,13 @@ CM_ BO_ 0x1104 "IC1 Cell 17, 100uV/bit";
 CM_ BO_ 0x1200 "IC1 Temperatures (NTC 1-4), 0.1 degC/bit";
 CM_ BO_ 0x1300 "Pack-level BMS Status aggregated from all ICs (Faults, Balance IC mask, Min/Max Voltage)";
 CM_ BO_ 0x1400 "IC1 Cell Balance Status (17-bit mask)";
+CM_ BO_ 0x1150 "IC6 Cells 1-4, 100uV/bit";
+CM_ BO_ 0x1151 "IC6 Cells 5-8, 100uV/bit";
+CM_ BO_ 0x1152 "IC6 Cells 9-12, 100uV/bit";
+CM_ BO_ 0x1153 "IC6 Cells 13-16, 100uV/bit";
+CM_ BO_ 0x1154 "IC6 Cell 17, 100uV/bit";
+CM_ BO_ 0x1205 "IC6 Temperatures (NTC 1-4), 0.1 degC/bit";
+CM_ BO_ 0x1405 "IC6 Cell Balance Status (17-bit mask)";
 
 CM_ SG_ 0x1300 Pack_Fault_Bits "Bit 0: !BMS_OK, Bit 1: Under Temp, Bit 2: Over Temp, Bit 3: Cell Voltage OOR, Bit 4: Open Wire";
 CM_ SG_ 0x1300 Pack_Balance_IC_Mask "6-bit mask: each bit indicates if the corresponding IC has cells being balanced";
